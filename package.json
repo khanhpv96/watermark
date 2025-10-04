@@ -4,14 +4,22 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build-win": "electron-builder --win"
+    "build": "electron-builder --win portable"
   },
   "build": {
     "appId": "com.watermark.app",
     "productName": "Watermark Tool",
     "win": {
-      "target": "nsis",
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
       "icon": "icon.ico"
+    },
+    "portable": {
+      "artifactName": "WatermarkTool-Portable.exe"
     }
   },
   "dependencies": {
