@@ -73,17 +73,24 @@
       <div class="section">
         <div class="progress-bar">
           <div id="progressFill"></div>
+          <div id="progressText">0%</div>
         </div>
-        <div id="progressText">0%</div>
         <div class="button-row">
           <button id="btnStart" class="btn-primary">BẮT ĐẦU</button>
           <button id="btnPause" class="btn-secondary" disabled>TẠM DỪNG</button>
+          <button id="btnStop" class="btn-danger" disabled>DỪNG</button>
         </div>
       </div>
     </div>
 
     <div class="preview-area">
-      <h2>XEM TRƯỚC</h2>
+      <div class="preview-header">
+        <h2>XEM TRƯỚC</h2>
+        <label class="checkbox-label">
+          <input type="checkbox" id="showWatermark" checked>
+          <span>Hiển thị watermark</span>
+        </label>
+      </div>
       <div class="preview-container">
         <canvas id="previewCanvas"></canvas>
         <div id="noPreview">Chưa có ảnh preview</div>

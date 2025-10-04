@@ -9,6 +9,10 @@ let updateTimeout = null;
 let isProcessing = false;
 let isPaused = false;
 
+let currentProgress = 0;
+let targetProgress = 0;
+let progressInterval = null;
+
 const canvas = document.getElementById('previewCanvas');
 const ctx = canvas.getContext('2d');
 
@@ -60,13 +64,41 @@ document.getElementById('density').addEventListener('input', (e) => {
   throttleUpdate();
 });
 
+document.getElementById('showWatermark').addEventListener('change', updatePreview);
+
 document.getElementById('btnStart').addEventListener('click', startProcessing);
 document.getElementById('btnPause').addEventListener('click', togglePause);
+document.getElementById('btnStop').addEventListener('click', stopProcessing);
+
+function smoothProgress(target) {
+  targetProgress = target;
+  
+  if (!progressInterval) {
+    progressInterval = setInterval(() => {
+      if (currentProgress < targetProgress) {
+        currentProgress++;
+        document.getElementById('progressFill').style.width = `${currentProgress}%`;
+        document.getElementById('progressText').textContent = `${currentProgress}%`;
+      } else if (currentProgress > targetProgress) {
+        currentProgress--;
+        document.getElementById('progressFill').style.width = `${currentProgress}%`;
+        document.getElementById('progressText').textContent = `${currentProgress}%`;
+      } else {
+        clearInterval(progressInterval);
+        progressInterval = null;
+      }
+    }, 20);
+  }
+}
 
 ipcRenderer.on('process-progress', (event, data) => {
   const percent = Math.round((data.processed / data.total) * 100);
-  document.getElementById('progressFill').style.width = `${percent}%`;
-  document.getElementById('progressText').textContent = `${percent}%`;
+  smoothProgress(percent);
+});
+
+ipcRenderer.on('process-stopped', (event, data) => {
+  const percent = Math.round((data.processed / data.total) * 100);
+  smoothProgress(percent);
 });
 
 async function updateImageCount() {
@@ -127,6 +159,9 @@ function updatePreview() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(previewImage, 0, 0);
   
+  const showWatermark = document.getElementById('showWatermark').checked;
+  if (!showWatermark) return;
+  
   const text = document.getElementById('watermarkText').value;
   if (!text) return;
   
@@ -182,8 +217,15 @@ async function startProcessing() {
   }
   
   isProcessing = true;
+  isPaused = false;
+  currentProgress = 0;
+  targetProgress = 0;
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('progressText').textContent = '0%';
   document.getElementById('btnStart').disabled = true;
   document.getElementById('btnPause').disabled = false;
+  document.getElementById('btnStop').disabled = false;
+  document.getElementById('btnPause').textContent = 'TẠM DỪNG';
   
   const settings = {
     text: document.getElementById('watermarkText').value,
@@ -203,13 +245,20 @@ async function startProcessing() {
   });
   
   isProcessing = false;
+  isPaused = false;
   document.getElementById('btnStart').disabled = false;
   document.getElementById('btnPause').disabled = true;
+  document.getElementById('btnStop').disabled = true;
   
   if (result.success) {
-    const buttonIndex = await ipcRenderer.invoke('show-success-dialog', 
-      `Đã xử lý thành công ${result.processed}/${result.total} ảnh!`
-    );
+    let message;
+    if (result.stopped) {
+      message = `Đã dừng xử lý. Đã hoàn thành ${result.processed}/${result.total} ảnh!`;
+    } else {
+      message = `Đã xử lý thành công ${result.processed}/${result.total} ảnh!`;
+    }
+    
+    const buttonIndex = await ipcRenderer.invoke('show-success-dialog', message);
     
     if (buttonIndex === 0) {
       await ipcRenderer.invoke('open-folder', outputFolder);
@@ -219,7 +268,20 @@ async function startProcessing() {
   }
 }
 
-function togglePause() {
+async function togglePause() {
   isPaused = !isPaused;
-  document.getElementById('btnPause').textContent = isPaused ? 'TIẾP TỤC' : 'TẠM DỪNG';
+  
+  if (isPaused) {
+    await ipcRenderer.invoke('pause-processing');
+    document.getElementById('btnPause').textContent = 'TIẾP TỤC';
+  } else {
+    await ipcRenderer.invoke('resume-processing');
+    document.getElementById('btnPause').textContent = 'TẠM DỪNG';
+  }
+}
+
+async function stopProcessing() {
+  await ipcRenderer.invoke('stop-processing');
+  document.getElementById('btnPause').disabled = true;
+  document.getElementById('btnStop').disabled = true;
 }
