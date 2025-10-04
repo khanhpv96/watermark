@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const sharp = require('sharp');
@@ -9,13 +9,22 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 750,
+    autoHideMenuBar: true,
     webPreferences: {
       nodeIntegration: true,
-      contextIsolation: false
+      contextIsolation: false,
+      devTools: false
     }
   });
 
+  mainWindow.setMenuBarVisibility(false);
   mainWindow.loadFile('index.html');
+
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F12' || (input.control && input.shift && input.key === 'I')) {
+      event.preventDefault();
+    }
+  });
 }
 
 app.whenReady().then(createWindow);
@@ -85,6 +94,33 @@ ipcMain.handle('load-image', async (event, imagePath) => {
   }
 });
 
+function createWatermarkSVG(width, height, settings) {
+  const { text, fontSize, color, rotation, hSpacing, vSpacing, opacity, density } = settings;
+  
+  const scale = Math.min(width, height) / 1000;
+  const scaledHSpacing = Math.round(hSpacing * scale * (11 - density) / 5);
+  const scaledVSpacing = Math.round(vSpacing * scale * (11 - density) / 5);
+  
+  const diagonal = Math.ceil(Math.sqrt(width * width + height * height));
+  
+  let textElements = '';
+  for (let y = -diagonal; y < diagonal * 2; y += scaledVSpacing) {
+    for (let x = -diagonal; x < diagonal * 2; x += scaledHSpacing) {
+      textElements += `<text x="${x}" y="${y}" font-size="${fontSize}" font-weight="bold" font-family="Arial" fill="${color}" fill-opacity="${opacity / 100}">${text}</text>`;
+    }
+  }
+  
+  const svg = `
+    <svg width="${width}" height="${height}">
+      <g transform="translate(${width/2}, ${height/2}) rotate(${-rotation}) translate(${-width/2}, ${-height/2})">
+        ${textElements}
+      </g>
+    </svg>
+  `;
+  
+  return Buffer.from(svg);
+}
+
 ipcMain.handle('process-images', async (event, options) => {
   const { inputFolder, outputFolder, settings } = options;
   
@@ -112,17 +148,11 @@ ipcMain.handle('process-images', async (event, options) => {
           .resize(newWidth, newHeight, { fit: 'fill' })
           .toBuffer();
         
-        const watermarkBase64 = await event.sender.invoke('create-watermark', { 
-          width: newWidth, 
-          height: newHeight, 
-          settings 
-        });
-        
-        const watermarkBuffer = Buffer.from(watermarkBase64, 'base64');
+        const watermarkSVG = createWatermarkSVG(newWidth, newHeight, settings);
         
         const watermarked = await sharp(resized)
           .composite([{
-            input: watermarkBuffer,
+            input: watermarkSVG,
             blend: 'over'
           }])
           .toBuffer();
@@ -143,6 +173,19 @@ ipcMain.handle('process-images', async (event, options) => {
   }
 });
 
-async function applyWatermark(imageBuffer, width, height, settings) {
-  return imageBuffer;
-}
+ipcMain.handle('show-success-dialog', async (event, message) => {
+  const result = await dialog.showMessageBox(mainWindow, {
+    type: 'info',
+    title: 'Hoàn tất',
+    message: message,
+    buttons: ['Mơ thư mục', 'Đóng'],
+    defaultId: 0,
+    cancelId: 1
+  });
+  
+  return result.response;
+});
+
+ipcMain.handle('open-folder', async (event, folderPath) => {
+  shell.openPath(folderPath);
+});

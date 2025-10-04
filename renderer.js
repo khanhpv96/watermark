@@ -207,7 +207,13 @@ async function startProcessing() {
   document.getElementById('btnPause').disabled = true;
   
   if (result.success) {
-    alert(`Đã xử lý thành công ${result.processed}/${result.total} ảnh!`);
+    const buttonIndex = await ipcRenderer.invoke('show-success-dialog', 
+      `Đã xử lý thành công ${result.processed}/${result.total} ảnh!`
+    );
+    
+    if (buttonIndex === 0) {
+      await ipcRenderer.invoke('open-folder', outputFolder);
+    }
   } else {
     alert(`Lỗi: ${result.error}`);
   }
