@@ -1,0 +1,24 @@
+{
+  "name": "watermark-app",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build-win": "electron-builder --win"
+  },
+  "build": {
+    "appId": "com.watermark.app",
+    "productName": "Watermark Tool",
+    "win": {
+      "target": "nsis",
+      "icon": "icon.ico"
+    }
+  },
+  "dependencies": {
+    "sharp": "^0.33.0"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  }
+}
