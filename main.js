@@ -4,10 +4,12 @@ const fs = require('fs').promises;
 const sharp = require('sharp');
 
 let mainWindow;
+let shouldStop = false;
+let isPaused = false;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1400,
+    width: 1500,
     height: 750,
     autoHideMenuBar: true,
     webPreferences: {
@@ -69,6 +71,16 @@ ipcMain.handle('count-images', async (event, folderPath) => {
   }
 });
 
+ipcMain.handle('list-images-in-folder', async (event, folderPath) => {
+  try {
+    const files = await fs.readdir(folderPath);
+    const imageExts = ['.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.webp'];
+    return files.filter(f => imageExts.includes(path.extname(f).toLowerCase()));
+  } catch {
+    return [];
+  }
+});
+
 ipcMain.handle('load-image', async (event, imagePath) => {
   try {
     const buffer = await fs.readFile(imagePath);
@@ -124,6 +136,9 @@ function createWatermarkSVG(width, height, settings) {
 ipcMain.handle('process-images', async (event, options) => {
   const { inputFolder, outputFolder, settings } = options;
   
+  shouldStop = false;
+  isPaused = false;
+  
   try {
     const files = await fs.readdir(inputFolder);
     const imageExts = ['.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.webp'];
@@ -132,6 +147,15 @@ ipcMain.handle('process-images', async (event, options) => {
     let processed = 0;
     
     for (const file of imageFiles) {
+      while (isPaused && !shouldStop) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      if (shouldStop) {
+        event.sender.send('process-stopped', { processed, total: imageFiles.length });
+        return { success: true, stopped: true, processed, total: imageFiles.length };
+      }
+      
       try {
         const inputPath = path.join(inputFolder, file);
         const outputPath = path.join(outputFolder, file);
@@ -173,12 +197,28 @@ ipcMain.handle('process-images', async (event, options) => {
   }
 });
 
+ipcMain.handle('pause-processing', () => {
+  isPaused = true;
+  return true;
+});
+
+ipcMain.handle('resume-processing', () => {
+  isPaused = false;
+  return true;
+});
+
+ipcMain.handle('stop-processing', () => {
+  shouldStop = true;
+  isPaused = false;
+  return true;
+});
+
 ipcMain.handle('show-success-dialog', async (event, message) => {
   const result = await dialog.showMessageBox(mainWindow, {
     type: 'info',
     title: 'Hoàn tất',
     message: message,
-    buttons: ['Mơ thư mục', 'Đóng'],
+    buttons: ['Mở thư mục', 'Đóng'],
     defaultId: 0,
     cancelId: 1
   });
